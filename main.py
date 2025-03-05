@@ -6,7 +6,8 @@ from faultManager.FaultListManager import FLManager
 from faultManager.FaultInjectionManager import FaultInjectionManager
 from ofmapManager.OutputFeatureMapsManager import OutputFeatureMapsManager
 from utils import get_network, get_device, get_loader, get_fault_list, clean_inference, output_definition,  \
-                  get_fault_list, clean_inference, output_definition,  fault_list_gen, csv_summary
+                  get_fault_list, clean_inference, output_definition,  fault_list_gen, csv_summary, \
+                  image_segmentation_clean_inference, segmentation_clean_output,csv_summary_segmentation
    
 
 
@@ -22,7 +23,13 @@ def main():
     
     if SETTINGS.FAULTS_INJECTION or SETTINGS.ONLY_CLEAN_INFERENCE:
         # Set deterministic algorithms
-        torch.use_deterministic_algorithms(mode=True)
+        
+        if SETTINGS.IMAGE_SEGMENTATION:
+            os.environ["CUBLAS_WORKSPACE_CONFIG"] = ":4096:8"  # Oppure ":16:8"
+            torch.use_deterministic_algorithms(mode=True)
+        else:
+            torch.use_deterministic_algorithms(mode=True)
+
 
         # Select the device
         device = get_device(use_cuda0=SETTINGS.USE_CUDA_0,
@@ -30,23 +37,33 @@ def main():
         
         print(f'Using device {device}')
          
-        # Load the dataset
-        _, loader = get_loader(network_name=SETTINGS.NETWORK,
-                            batch_size=SETTINGS.BATCH_SIZE,
-                            dataset_name=SETTINGS.DATASET)
-        
+         
         # Load the network
         network = get_network(network_name=SETTINGS.NETWORK,
                             device=device,
                             dataset_name=SETTINGS.DATASET)
         
-        if SETTINGS.ONLY_CLEAN_INFERENCE:
-            print('clean inference accuracy test:')
-            clean_inference(network, loader, device, SETTINGS.NETWORK)
-            exit(-1)
         
-        print('clean inference accuracy test:')
-        clean_inference(network, loader, device, SETTINGS.NETWORK)
+        # Load the dataset
+        loader = get_loader(network_name=SETTINGS.NETWORK,
+                            batch_size=SETTINGS.BATCH_SIZE,
+                            dataset_name=SETTINGS.DATASET)
+        
+        
+        
+        if SETTINGS.ONLY_CLEAN_INFERENCE: 
+            
+            if SETTINGS.IMAGE_CLASSIFICATION:
+                print('clean inference accuracy test:')
+                clean_inference(network, loader, device, SETTINGS.NETWORK)
+                exit(-1)
+            elif SETTINGS.IMAGE_SEGMENTATION:
+                print('clean inference accuracy test:')
+                image_segmentation_clean_inference(network, loader, device, network_name=SETTINGS.NETWORK)
+                exit(-1)
+            else:
+                raise ValueError("Unsupported task type. Please check SETTINGS configuration.")
+        
 
         # Folder containing the feature maps
         clean_fm_folder = SETTINGS.CLEAN_FM_FOLDER
@@ -75,7 +92,12 @@ def main():
                                                     clean_output_folder=clean_output_folder)
 
         # Try to load the clean input
-        clean_ofm_manager.load_clean_output()
+        if SETTINGS.IMAGE_CLASSIFICATION:
+            clean_ofm_manager.load_clean_output()
+        elif SETTINGS.IMAGE_SEGMENTATION:
+            segmentation_clean_output(device=device, model=network, dataloader=loader)
+        else:
+            raise ValueError("Unsupported task type. Please check SETTINGS configuration.")
 
         # Generate fault list
         fault_list_generator = FLManager(network=network,
@@ -90,6 +112,7 @@ def main():
         # fault_list_generator.update_network(network)
 
         # Manage the fault models
+        
         fault_list, injectable_modules = get_fault_list(fault_model=SETTINGS.FAULT_MODEL,
                                                         fault_list_generator=fault_list_generator)
 
@@ -101,19 +124,30 @@ def main():
                                                         clean_output=clean_ofm_manager.clean_output,
                                                         injectable_modules=injectable_modules)
         
-        fault_injection_executor.run_faulty_campaign_on_weight(fault_model=SETTINGS.FAULT_MODEL,
+        if SETTINGS.IMAGE_CLASSIFICATION:
+            fault_injection_executor.run_faulty_campaign_on_weight(fault_model=SETTINGS.FAULT_MODEL,
+                                                                fault_list=fault_list,
+                                                                first_batch_only=False,
+                                                                force_n=SETTINGS.FAULTS_TO_INJECT,
+                                                                save_output=SETTINGS.SAVE_FAULTY_OUTPUT,
+                                                                save_ofm=SETTINGS.SAVE_FAULTY_OFM,
+                                                                ofm_folder=faulty_fm_folder)
+        elif SETTINGS.IMAGE_SEGMENTATION:
+            fault_injection_executor.run_faulty_campaign_on_weight_segmentation(fault_model=SETTINGS.FAULT_MODEL,
                                                             fault_list=fault_list,
                                                             first_batch_only=False,
                                                             force_n=SETTINGS.FAULTS_TO_INJECT,
                                                             save_output=SETTINGS.SAVE_FAULTY_OUTPUT,
                                                             save_ofm=SETTINGS.SAVE_FAULTY_OFM,
                                                             ofm_folder=faulty_fm_folder)
-        
+        else:
+            raise ValueError("Unsupported task type. Please check SETTINGS configuration")
+            
         
     else:
         print('Fault injection is disabled')
         
-    if SETTINGS.FI_ANALYSIS:
+    if SETTINGS.FI_ANALYSIS and SETTINGS.IMAGE_CLASSIFICATION:
         try:
             output_definition(test_loader=loader, batch_size=SETTINGS.BATCH_SIZE)
             print('Done')
@@ -132,9 +166,17 @@ def main():
         print('Fault injection analysis is disabled')
     
     if SETTINGS.FI_ANALYSIS_SUMMARY:
-        print('Generating csv summary')
-        csv_summary()
-        print('csv summary generated')
+        if SETTINGS.IMAGE_CLASSIFICATION:
+            print('Generating csv summary')
+            csv_summary()
+            print('csv summary generated')
+        elif SETTINGS.IMAGE_SEGMENTATION:
+            print('Generating csv summary')
+            csv_summary_segmentation()
+            print('csv summary generated')
+        else:
+            raise ValueError("Unsupported task type. Please check SETTINGS configuration")
+
         
 
 

@@ -69,6 +69,18 @@ class FaultInjectionManager:
 
             self.network(data)
 
+    
+    def restore_fault(self):
+        """Ripristina il valore originale se è stato modificato."""
+        if self.golden_value is not None and self.layer_name is not None:
+            self.network.state_dict()[self.layer_name][self.tensor_index] = self.golden_value
+            # print(f"Restored {self.layer_name} at index {self.tensor_index} to {self.golden_value}")
+            # Dopo il ripristino, svuotiamo la memoria per evitare problemi
+            self.golden_value = None
+            self.layer_name = None
+            self.tensor_index = None
+        else:
+            print("No fault to restore!")
 
     def run_faulty_campaign_on_weight(self,
                                       fault_model: str,
@@ -246,6 +258,121 @@ class FaultInjectionManager:
         return str(timedelta(seconds=elapsed)), average_memory_occupation
 
 
+    
+    def run_faulty_campaign_on_weight_segmentation(self,
+                                      fault_model: str,
+                                      fault_list: list,
+                                      first_batch_only: bool = False,
+                                      force_n: int = None,
+                                      save_output: bool = False,
+                                      save_ofm: bool = False,
+                                      ofm_folder: str = None) -> (str, int):
+        
+        self.skipped_inferences = 0
+        self.total_inferences = 0
+        
+        os.makedirs(SETTINGS.FI_ANALYSIS_PATH, exist_ok=True)
+        
+        csv_file = open(f'{SETTINGS.FI_ANALYSIS_PATH}/results.csv', 'a')
+        csv_writer = csv.writer(csv_file)
+        csv_writer.writerow(['Image_ID', 'Fault_ID', 'same_pixel_gold','same_pixel_label',*(f"IOU_class_{i}_gold" for i in range(21)),*(f"IOU_class_{i}_label" for i in range(21))])      
+
+        golden_output = np.load(f'{SETTINGS.CLEAN_OUTPUT_FOLDER}/all_batches.npy')
+        golden_output = torch.tensor(golden_output)
+        
+        with torch.no_grad():
+            
+            if force_n is not None:
+                fault_list = fault_list[:force_n]
+                
+            fault_list = sorted(fault_list, key=lambda x: x.injection)
+            
+            
+            pbar2 = tqdm(fault_list,
+                        colour='green',
+                        desc=f'Fault Injection',
+                        ncols=shutil.get_terminal_size().columns)
+            
+            # Create a CSV file to save the data
+           
+            for fault_id, fault in enumerate(pbar2):
+                
+        
+                if fault_model == 'stuck-at_params':
+                    self.__inject_fault_on_weight(fault, fault_mode='stuck-at')
+                else:
+                    raise ValueError(f'Invalid fault model {fault_model}')
+                
+                torch.cuda.reset_peak_memory_stats()
+                
+                batch_id = 0
+                correctPixels = 0
+                numclass = 21
+                pbar = tqdm(self.loader, 
+                        colour='green',
+                        desc=f'fault_id {fault_id}',
+                        ncols=shutil.get_terminal_size().columns * 2)  # progress bar
+                
+                for img, label in pbar:
+                    
+                    img = img.to(self.device)
+                    label = label.to(self.device)
+                    label = label.squeeze(1)
+                                        
+                    
+                    output = self.network(img)["out"]
+                    faulty_pred = output.argmax(axis=1)
+                    
+                    
+                    actual_batch_size = faulty_pred.size(0) 
+                    golden_pred = golden_output[batch_id][:actual_batch_size].to(self.device)
+                     
+                    
+                    diff = golden_pred == faulty_pred
+                    correctPixels = diff.sum(axis=[1,2])
+
+                    diff2 = label == faulty_pred
+                    correctPixels2 = diff2.sum(axis=[1,2])
+           
+                    
+                    
+              
+                    # IoU between faulty and golden
+                    ious = torch.zeros((numclass, actual_batch_size))
+                    for cls in range(numclass):
+                        clsPred = faulty_pred == cls
+                        clsLab = golden_pred == cls
+                        inter = torch.logical_and(clsPred, clsLab).sum(axis=[1,2])
+                        union = torch.logical_or(clsPred, clsLab).sum(axis=[1,2])
+                        iou = inter/union
+                        # print(iou.shape)
+                        ious[cls] = iou
+                        
+                    ious2 = torch.zeros((numclass, actual_batch_size))
+                    for cls2 in range(numclass):
+                        clsPred2 = faulty_pred == cls2
+                        clsLab2 = label == cls2
+                  
+                        inter2 = torch.logical_and(clsPred2, clsLab2).sum(axis=[1,2])
+                        union2 = torch.logical_or(clsPred2, clsLab2).sum(axis=[1,2])
+                        iou2 = inter2/union2
+                        ious2[cls2] = iou2
+                      
+                    for i in range(actual_batch_size):
+                        csv_writer.writerow([i+SETTINGS.BATCH_SIZE*batch_id, fault_id, correctPixels[i].tolist(), correctPixels2[i].tolist(), *(ious[:,i].tolist()), *(ious2[:,i].tolist())])                
+
+                    batch_id += 1
+                
+                
+                
+                # Clean the fault    
+                if fault_model == 'stuck-at_params':
+                    self.weight_fault_injector.restore_fault()
+                else:
+                    raise ValueError(f'Invalid fault model {fault_model}')
+                    
+        return 0
+    
     def __run_inference_on_batch(self,
                                  batch_id: int,
                                  data: torch.Tensor):

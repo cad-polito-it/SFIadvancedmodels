@@ -20,7 +20,7 @@ from torchvision.models import resnet
 from torchvision.models.densenet import _DenseBlock, _Transition
 from torchvision.models.efficientnet import Conv2dNormActivation
 from torchvision import transforms
-from torchvision.datasets import GTSRB, CIFAR10, CIFAR100, MNIST, ImageNet
+from torchvision.datasets import GTSRB, CIFAR10, CIFAR100, MNIST, ImageNet, VOCSegmentation
 from torchvision.transforms.v2 import ToTensor,Resize,Compose,ColorJitter,RandomRotation,AugMix,GaussianBlur,RandomEqualize,RandomHorizontalFlip,RandomVerticalFlip
 
 import csv
@@ -28,9 +28,81 @@ from tqdm import tqdm
 
 import random
 
+TQDM_BAR_FORMAT = "{l_bar}{bar:10}{r_bar}"  # tqdm bar format
+
 
 class UnknownNetworkException(Exception):
     pass
+
+
+def image_segmentation_clean_inference(network, loader, device, network_name):
+    
+
+    correctPixels = 0
+    numclass = 21
+    same_pixels = []
+
+    pbar = tqdm(loader, bar_format=TQDM_BAR_FORMAT)  # progress bar
+    batch_id = 0
+    totalIOUs = []
+    batch_files = []  # Lista per tenere traccia dei file salvati
+    batch_sizes = []  # Lista per salvare le dimensioni delle batch
+
+    
+    # ------- to check if golden_output matrix is correct ------------
+    # golden_output = np.load('results_segmentation/all_batches.npy')
+    # golden_output = torch.tensor(golden_output)
+    # ----------------------------------------------------------------
+    
+    with torch.no_grad(): 
+        for img, label in pbar:
+            img = img.to(device)
+            label = label.to(device)
+
+            batch_size = img.size(0)
+            
+            output = network(img)["out"]
+            pred = output.argmax(axis=1)
+
+            label = label.squeeze(1)
+
+            # pixel accuracy
+            diff = pred == label
+            correctPixels = diff.sum(axis=[1,2])
+            same_pixels.append(correctPixels)
+            
+            ious = torch.zeros((numclass, batch_size))
+                # print(ious.shape)
+            for cls in range(numclass):
+                clsPred = pred == cls
+                clsLab = label == cls
+                inter = torch.logical_and(clsPred, clsLab).sum(axis=[1,2])
+                union = torch.logical_or(clsPred, clsLab).sum(axis=[1,2])
+                iou = inter/union
+                # print(iou.shape)
+                ious[cls] = iou
+            totalIOUs.append(ious)
+            
+            batch_id += 1
+        
+
+    # total pixel accuracy
+    total_same_pixels = torch.concat(same_pixels)
+    print(total_same_pixels.shape)
+    print('Pixel Accuracy',total_same_pixels.sum() / (total_same_pixels.shape[0] * 520*520))
+    
+    
+    # table with IOUS. axis 0 has the categories, axis 1 has the images
+    iousT = torch.concat([*totalIOUs], axis=1)
+
+    # mIOU per image
+    mIOU_image = torch.nanmean(iousT, axis=0)
+    print(mIOU_image)
+
+    # mIOU for the network
+    mIOU = torch.mean(mIOU_image)
+    print('Mean Intersection Over Union',mIOU)
+
 
 
 def clean_inference(network, loader, device, network_name):
@@ -83,7 +155,14 @@ def get_network(network_name: str,
                 root: str = '.') -> torch.nn.Module:
     
     # Load the network by using the name of the mode and the dataset
-    
+    if dataset_name == 'PASCAL_VOC' or 'COCOdetection':
+        print(f'Loading network {network_name} ...')
+        if 'DeepLabV3_resnet50' in network_name:
+            network_paht = './dlModels/PASCAL_VOC/pretrained/deeplabv3_resnet50.pth'
+            network = torch.load(network_paht, map_location=device)
+        else:
+            raise ValueError(f'Invalid network name {network}')
+        
     if dataset_name == 'CIFAR10':
         print(f'Loading network {network_name} ...')   
         if 'ResNet20' in network_name:
@@ -206,6 +285,12 @@ def get_loader(network_name: str,
         print('Loading GTSRB dataset')
         train_loader, _, loader = Load_GTSRB_datasets(test_batch_size=batch_size,
                                              test_image_per_class=image_per_class)
+        
+    elif 'PASCAL_VOC' == dataset_name:
+        print('Loading PASCAL_VOC dataset')
+        loader = Load_PASCAL_VOC_datasets(test_batch_size=batch_size,
+                                             test_image_per_class=image_per_class)
+        
     else:
         print('no dataset specified')
         exit()
@@ -213,7 +298,7 @@ def get_loader(network_name: str,
 
     print(f'Batch size:\t\t{batch_size} \nNumber of batches:\t{len(loader)}')
 
-    return train_loader, loader
+    return loader
 
 
 def get_delayed_start_module(network: Module,
@@ -431,6 +516,44 @@ def load_MNIST_datasets(train_batch_size=32, test_batch_size=1):
     return train_loader, test_loader
 
 
+def Load_PASCAL_VOC_datasets(train_batch_size=32, train_split=0.8, test_batch_size=1, test_image_per_class=None):
+    
+
+    val_transform = transforms.Compose([
+                transforms.Resize((520, 520)),  
+                transforms.ToTensor(),
+                transforms.Normalize(mean=[0.485, 0.456, 0.406],
+                                std=[0.229, 0.224, 0.225])
+            ])
+    
+    t_transform = transforms.Compose([
+        transforms.v2.ToImage(),
+        Resize((520, 520), interpolation =  transforms.v2.InterpolationMode.NEAREST),
+        
+    ])
+   
+    
+    val_dataset = VOCSegmentation(root=SETTINGS.DATASET_PATH,
+                                year='2012',
+                                image_set='val',
+                                download=True,
+                                transform=val_transform,
+                                target_transform = t_transform)
+
+    
+
+    
+    test_loader = DataLoader(dataset=val_dataset,
+                                batch_size=test_batch_size,
+                                shuffle=False
+                            )
+    
+   
+
+    print('PASCA VOC Dataset loaded')
+    
+    
+    return test_loader
 
 def Load_GTSRB_datasets(train_batch_size=32, train_split=0.8, test_batch_size=1, test_image_per_class=None):
     
@@ -773,6 +896,121 @@ def output_definition(test_loader, batch_size):
     return output_results_list
 
 
+def csv_summary_segmentation():
+    
+    total_pixel = 520*520
+
+    df = pd.read_csv(f'{SETTINGS.FI_ANALYSIS_PATH}/results.csv')
+
+    os.makedirs(SETTINGS.FI_SUM_ANALYSIS_PATH, exist_ok=True)
+    
+    csv_writer = open(f'{SETTINGS.FI_SUM_ANALYSIS_PATH}/summary.csv', 'a')
+    csv_writer.write('Fault_id, Masked SDC, Tolerable SDC, Critical SDC')
+
+    num_rows_excluding_first = len(df)
+    inference_classifications = []
+
+    max_fault_id = df['Fault_ID'].max()+1
+    max_image_id = df['Image_ID'].max()+1
+
+    impact0 = 0
+    impact1 = 0
+    impact2 = 0
+
+    for i in range((num_rows_excluding_first)):
+        
+        row_values = df.iloc[i].values
+        
+        Image_ID = int(row_values[0])
+        Fault_ID = int(row_values[1])
+        
+        
+        # Faulty inference classification
+        PixelAccuracy_gold = row_values[2]/total_pixel
+        
+        IoU_image_golden = row_values[4:25].tolist()
+
+        if PixelAccuracy_gold == 1:
+            impact = 0
+            impact0 += 1
+        elif PixelAccuracy_gold > 0.99 and 0 not in IoU_image_golden:
+            impact = 1
+            impact1 += 1
+        else:
+            impact = 2
+            impact2 += 1
+        
+        inference_classifications.append([Image_ID,Fault_ID,impact])
+        
+        # IoU faulty-ground truth
+
+
+    # PIXEL ACCURACY
+    same_pixel_label_values = df['same_pixel_label'].values.astype(int)
+    same_pixel_golden_values = df['same_pixel_gold'].values.astype(int)
+
+    print('average pixel accuracy between faulty and golden')
+    mFaultyPixelAcuracy_gold = same_pixel_golden_values.sum()/(total_pixel*max_image_id*max_fault_id)
+    print(mFaultyPixelAcuracy_gold)
+
+
+    print('average pixel accuracy between faulty and label')
+    mFaultyPixelAcuracy_label = same_pixel_label_values.sum()/(total_pixel*max_image_id*max_fault_id)
+    print(mFaultyPixelAcuracy_label)
+
+    print('\n')
+
+
+    # IoU between faulty and golden
+    # Calculate the mean of the 'IOU_class_X_gold' columns, ignoring NaN values
+    mean_IOU_classes = {}
+    for class_id in range(21):
+        column_name = f'IOU_class_{class_id}_gold'
+        mean_IOU_classes[class_id] = df[column_name].mean(skipna=True)
+
+    # print(mean_IOU_classes)
+    mIoU = np.mean(list(mean_IOU_classes.values()))
+    print('average IoU between faulty and golden')
+    print(mIoU)
+
+
+
+    # IoU between faulty and ground truth
+    # Calculate the mean of the 'IOU_class_X_label' columns, ignoring NaN values
+    mean_IOU_classes = {}
+    for class_id in range(21):
+        column_name = f'IOU_class_{class_id}_label'
+        mean_IOU_classes[class_id] = df[column_name].mean(skipna=True)
+
+    # print(mean_IOU_classes)
+    mIoU = np.mean(list(mean_IOU_classes.values()))
+    print('average IoU between faulty and ground truth')
+    print(mIoU)
+
+
+    print('\n')
+
+    print('masked SDC')
+    print(f'{100*impact0/(max_image_id*max_fault_id):.3f}%')
+    print('tolerable SDC')
+    print(f'{100*impact1/(max_image_id*max_fault_id):.3f}%')
+    print('critical SDC')
+    print(f'{100*impact2/(max_image_id*max_fault_id):.3f}%')
+
+    # summary csv generation
+    for j in range(max_fault_id):
+
+        counts = {0: 0, 1: 0, 2: 0}
+        for classification in inference_classifications:
+            if classification[1] == j:
+                counts[classification[2]] += 1
+        
+        csv_writer.write(f"\n{j},{counts[0]},{counts[1]},{counts[2]}")
+        
+    
+    return 0
+
+
 def csv_summary():
     
     network_name = SETTINGS.NETWORK_NAME
@@ -990,5 +1228,114 @@ def fault_list_gen():
     print(f"Number of duplicate indices: {row_number - len(used_indices)}")
     print(f"Number of unique indices: {len(used_indices)}")
     print(f"CSV file '{csv_filename}' has been created successfully.")
+
+
+
+
+def segmentation_clean_output(device, model, dataloader):
+    
+
+    correctPixels = 0
+    numclass = 21
+    same_pixels = []
+
+    pbar = tqdm(dataloader, bar_format=TQDM_BAR_FORMAT)  # progress bar
+    batch_id = 0
+    totalIOUs = []
+    batch_files = []  # Lista per tenere traccia dei file salvati
+    batch_sizes = []  # Lista per salvare le dimensioni delle batch
+
+    
+    os.makedirs(SETTINGS.CLEAN_OUTPUT_FOLDER, exist_ok=True)
+
+    final_filename = f'{SETTINGS.CLEAN_OUTPUT_FOLDER}/all_batches.npy'
+    
+    if not os.path.exists(final_filename):
+        with torch.no_grad(): 
+            for img, label in pbar:
+                img = img.to(device)
+                label = label.to(device)
+
+                batch_size = img.size(0)
+                
+                output = model(img)["out"]
+                pred = output.argmax(axis=1)
+
+                label = label.squeeze(1)
+
+                # Save the prediction as a numpy file
+            
+                pred_np = pred.cpu().numpy()
+                batch_filename = f'{SETTINGS.CLEAN_OUTPUT_FOLDER}/pred_batch_{batch_id}.npy'
+                np.save(batch_filename, pred_np)
+                batch_files.append(batch_filename)
+                batch_sizes.append(pred_np.shape[0])  # Salva la dimensione del batch
+                    
+                if batch_id == len(dataloader) - 1:
+                    all_batches = [np.load(f) for f in batch_files]  # Carica tutti i file .npy
+            
+                    # Trova la dimensione massima delle batch
+                    max_batch_size = max(batch_sizes)
+                    padded_batches = []
+                    
+                    for batch in all_batches:
+                        if batch.shape[0] < max_batch_size:
+                            # Padding con -1 o 0 per uniformare la dimensione
+                            pad_shape = (max_batch_size - batch.shape[0], *batch.shape[1:])
+                            pad_array = np.full(pad_shape, fill_value=-1, dtype=batch.dtype)  # Usa -1 per distinguere il padding
+                            batch = np.concatenate([batch, pad_array], axis=0)  # Aggiungi il padding
+                        padded_batches.append(batch)
+
+                    # Ora possiamo concatenare in modo sicuro
+                    combined_array = np.stack(padded_batches, axis=0)  
+                    final_filename =f'{SETTINGS.CLEAN_OUTPUT_FOLDER}/all_batches.npy'
+                    np.save(final_filename, combined_array)  # Salva il file finale
+
+                    # Elimina i file batch intermedi
+                    for f in batch_files:
+                        os.remove(f)
+                                
+
+
+                # pixel accuracy
+                diff = pred == label
+                correctPixels = diff.sum(axis=[1,2])
+                same_pixels.append(correctPixels)
+                
+                ious = torch.zeros((numclass, batch_size))
+                    # print(ious.shape)
+                for cls in range(numclass):
+                    clsPred = pred == cls
+                    clsLab = label == cls
+                    inter = torch.logical_and(clsPred, clsLab).sum(axis=[1,2])
+                    union = torch.logical_or(clsPred, clsLab).sum(axis=[1,2])
+                    iou = inter/union
+                    # print(iou.shape)
+                    ious[cls] = iou
+                totalIOUs.append(ious)
+                
+                batch_id += 1
+            
+
+        # total pixel accuracy
+        total_same_pixels = torch.concat(same_pixels)
+        print('Pixel Accuracy',total_same_pixels.sum() / (total_same_pixels.shape[0] * 520*520))
+        
+        
+        # table with IOUS. axis 0 has the categories, axis 1 has the images
+        iousT = torch.concat([*totalIOUs], axis=1)
+
+        # mIOU per image
+        mIOU_image = torch.nanmean(iousT, axis=0)
+
+        # mIOU for the network
+        mIOU = torch.mean(mIOU_image)
+        print('Mean Intersection Over Union',mIOU)
+    
+    else:
+        print('clean output already exists')
+        print('ATTENTION: Batch size will be a trouble during FI if is not the same as the one used to create the clean output')
+
+
 
 

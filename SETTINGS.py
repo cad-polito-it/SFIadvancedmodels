@@ -1,5 +1,7 @@
 import torch
-
+import sys
+from pathlib import Path
+import os
 
 # SET THE NETWORKS 
 
@@ -13,30 +15,55 @@ FAULT_MODEL available: 'stuck-at_params', 'byzantine_neuron'
 
 NETWORK available: 'ResNet18', 'ResNet20', 'ResNet32', 'ResNet44', 
                           'DenseNet121', 'DenseNet161','MobileNetV2', 
-                          'GoogLeNet', 'Vgg11_bn', 'Vgg13_bn'
+                          'GoogLeNet', 'Vgg11_bn', 'Vgg13_bn', 'YOLOv5s',
+                          'DeepLabV3_resnet50'
 
 
-DATASET available: 'CIFAR10', 'CIFAR100', 'GTSRB'
+DATASET available: 'CIFAR10', 'CIFAR100', 'GTSRB', 'COCO', 'PASCAL_VOC','COCOdetection'
 
 
 
 '''
+# TASKS
+IMAGE_CLASSIFICATION = False
+IMAGE_SEGMENTATION = True
+
+
 # enable the fault list generation
-FAULT_LIST_GENERATION = True
+FAULT_LIST_GENERATION = False
 
 # enable the fault injection
-FAULTS_INJECTION = False
+FAULTS_INJECTION = True
 
 # 0 : masked, 1: non.critic, 2: critic
-FI_ANALYSIS = False
+FI_ANALYSIS = True
 FI_ANALYSIS_SUMMARY = True
 
 # network and dataset to use
-DATASET_NAME = 'CIFAR10'
-NETWORK_NAME = 'ResNet20'
+DATASET_NAME = 'PASCAL_VOC'
+NETWORK_NAME = 'DeepLabV3_resnet50'
 
 # if you want to check  only the accuracy of the clean model
-ONLY_CLEAN_INFERENCE = True
+ONLY_CLEAN_INFERENCE = False
+
+# ------------------------------------ SAVE SETTINGS ------------------------------------
+
+# SAVE CLEAN OFM
+SAVE_CLEAN_OFM = False
+
+# SAVE FAULTY OFM
+SAVE_FAULTY_OFM = False
+
+# SAVE FAULTY OUTPUT
+SAVE_FAULTY_OUTPUT = True
+
+# OFM TO SAVE
+if SAVE_FAULTY_OFM:   
+    INPUT_FMAPS_TO_SAVE = 'layer1.0.conv1'
+else:
+    INPUT_FMAPS_TO_SAVE = None
+
+
 # ------------------------------------ FAULT LIST SETTINGS ------------------------------------
 
 
@@ -58,7 +85,7 @@ FAULT_LIST_NAME = f'{NETWORK_NAME}_{SEED}_fault_list.csv'
 # ------------------------------------ FAULT INJECTION SETTINGS ------------------------------------
 
 #fault to inject in the model from the faul list
-FAULTS_TO_INJECT = 20
+FAULTS_TO_INJECT = 2
 
 # use the GPU is available
 USE_CUDA_0 = True
@@ -68,7 +95,7 @@ USE_CUDA_1 = False
 NO_LOG_RESULTS = False
 
 # test set batch size
-BATCH_SIZE = 64
+BATCH_SIZE = 8
 
 # fault model to use (check the top of the file for the available models)
 FAULT_MODEL = 'stuck-at_params'
@@ -90,28 +117,14 @@ BATCH_START = 0
 BATCH_END = 13
 
         
-# ------------------------------------ SAVE SETTINGS ------------------------------------
-
-# SAVE CLEAN OFM
-SAVE_CLEAN_OFM = True
-
-# SAVE FAULTY OFM
-SAVE_FAULTY_OFM = True
-
-# SAVE FAULTY OUTPUT
-SAVE_FAULTY_OUTPUT = True
-
-# OFM TO SAVE
-if SAVE_FAULTY_OFM:   
-    INPUT_FMAPS_TO_SAVE = 'layer1.0.conv1'
-else:
-    INPUT_FMAPS_TO_SAVE = None
 
 # ------------------------------------ PATHS ------------------------------------
 
 # CLEAN FOLDER PATHS
 CLEAN_FM_FOLDER = f'output/clean_feature_maps/{DATASET}/{NETWORK}/batch_{BATCH_SIZE}'
 CLEAN_OUTPUT_FOLDER = f'output/clean_output/{DATASET}/{NETWORK}/batch_{BATCH_SIZE}'
+CLEAN_OUTPUT_FOLDER_SEGMENTATION = f'output/clean_output/{DATASET}/{NETWORK}'
+
 
 # FAULTY FOLDER PATHS
 FAULTY_FM_FOLDER = f'output/faulty_feature_maps/{DATASET}/{NETWORK}/batch_{BATCH_SIZE}/{FAULT_MODEL}'

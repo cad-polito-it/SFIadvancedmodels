@@ -30,6 +30,19 @@ class WeightFaultInjector:
         self.faulty_value = faulty_value
 
         self.network.state_dict()[self.layer_name][self.tensor_index] = faulty_value
+        
+        
+    def restore_fault(self):
+        """Ripristina il valore originale se è stato modificato."""
+        if self.golden_value is not None and self.layer_name is not None:
+            self.network.state_dict()[self.layer_name][self.tensor_index] = self.golden_value
+            # print(f"Restored {self.layer_name} at index {self.tensor_index} to {self.golden_value}")
+            # Dopo il ripristino, svuotiamo la memoria per evitare problemi
+            self.golden_value = None
+            self.layer_name = None
+            self.tensor_index = None
+        else:
+            print("No fault to restore!")
 
     def __float32_bit_flip(self):
         """
