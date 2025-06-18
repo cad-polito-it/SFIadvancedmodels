@@ -155,7 +155,7 @@ def get_network(network_name: str,
                 root: str = '.') -> torch.nn.Module:
     
     # Load the network by using the name of the mode and the dataset
-    if dataset_name == 'PASCAL_VOC' or 'COCOdetection':
+    if dataset_name == 'PASCAL_VOC' or dataset_name == 'COCOdetection':
         print(f'Loading network {network_name} ...')
         if 'DeepLabV3_resnet50' in network_name:
             network_paht = './dlModels/PASCAL_VOC/pretrained/deeplabv3_resnet50.pth'
