@@ -1,3 +1,5 @@
+
+from encodings.punycode import T
 import torch
 import sys
 from pathlib import Path
@@ -24,9 +26,9 @@ DATASET available: 'CIFAR10', 'CIFAR100', 'GTSRB', 'COCO', 'PASCAL_VOC','COCOdet
 
 
 '''
-# TASKS
-IMAGE_CLASSIFICATION = False
-IMAGE_SEGMENTATION = True
+# 
+IMAGE_CLASSIFICATION = True
+IMAGE_SEGMENTATION = False
 
 
 # enable the fault list generation
@@ -36,16 +38,18 @@ FAULT_LIST_GENERATION = False
 FAULTS_INJECTION = True
 
 # 0 : masked, 1: non.critic, 2: critic
-FI_ANALYSIS = True
-FI_ANALYSIS_SUMMARY = True
+FI_ANALYSIS = False
+FI_ANALYSIS_SUMMARY = False
 
 # network and dataset to use
-DATASET_NAME = 'PASCAL_VOC'
-NETWORK_NAME = 'DeepLabV3_resnet50'
+DATASET_NAME = 'GTSRB'
+NETWORK_NAME = 'Vgg11_bn'
 
 # if you want to check  only the accuracy of the clean model
 ONLY_CLEAN_INFERENCE = False
 
+MC_DROPOUT = True
+DROPOUT_PROBABILITY = 0.5
 # ------------------------------------ SAVE SETTINGS ------------------------------------
 
 # SAVE CLEAN OFM
@@ -55,7 +59,7 @@ SAVE_CLEAN_OFM = False
 SAVE_FAULTY_OFM = False
 
 # SAVE FAULTY OUTPUT
-SAVE_FAULTY_OUTPUT = True
+SAVE_FAULTY_OUTPUT = False
 
 # OFM TO SAVE
 if SAVE_FAULTY_OFM:   
@@ -65,8 +69,6 @@ else:
 
 
 # ------------------------------------ FAULT LIST SETTINGS ------------------------------------
-
-
 
 # FAULT LIST
 SEED = 38
@@ -85,7 +87,7 @@ FAULT_LIST_NAME = f'{NETWORK_NAME}_{SEED}_fault_list.csv'
 # ------------------------------------ FAULT INJECTION SETTINGS ------------------------------------
 
 #fault to inject in the model from the faul list
-FAULTS_TO_INJECT = 2
+FAULTS_TO_INJECT = 16641
 
 # use the GPU is available
 USE_CUDA_0 = True
@@ -95,9 +97,10 @@ USE_CUDA_1 = False
 NO_LOG_RESULTS = False
 
 # test set batch size
-BATCH_SIZE = 8
+BATCH_SIZE = 128
 
-# fault model to use (check the top of the file for the available models)
+# fault model to use (check the top of the file for the available models) 
+# FAULT_MODEL available: 'stuck-at_params'
 FAULT_MODEL = 'stuck-at_params'
 
 # dataset to use (check the top of the file for the available datasets)
@@ -107,7 +110,7 @@ DATASET = DATASET_NAME
 NETWORK = NETWORK_NAME
 
 # threshold under which an error is undetected
-THRESHOLD = 0.0
+# THRESHOLD = 0.0
 
 # ------------------------------------ FAULT ANALYSIS SETTINGS ------------------------------------# 
 

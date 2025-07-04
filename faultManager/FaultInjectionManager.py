@@ -1,10 +1,14 @@
 import csv
+import enum
+from http.client import SEE_OTHER
 import os
 import shutil
 import time
 import math
 from datetime import timedelta
 import copy
+from unittest import loader
+# from turtle import mode
 
 import SETTINGS
 import numpy as np
@@ -18,8 +22,9 @@ from faultManager.NeuronFault import NeuronFault
 from faultManager.WeightFaultInjector import WeightFaultInjector
 
 from typing import List, Union
-
-
+from utils_MC_dropout import faulty_dropout_MC_inference
+from utils_MC_dropout import mc_dropout_forward
+import pandas as pd
 
 
 class FaultInjectionManager:
@@ -176,7 +181,7 @@ class FaultInjectionManager:
                         for injectable_module in self.injectable_modules:
                             injectable_module.ifm_path = f'{ofm_folder}/fault_{fault_id}_batch_{batch_id}_layer_{injectable_module.layer_name}'
 
-                    # Run inference on the current batch
+                  
                     faulty_scores, faulty_indices, different_predictions = self.__run_inference_on_batch(batch_id=batch_id,
                                                                                                          data=data)
 
@@ -257,6 +262,8 @@ class FaultInjectionManager:
 
         return str(timedelta(seconds=elapsed)), average_memory_occupation
 
+
+    
 
     
     def run_faulty_campaign_on_weight_segmentation(self,
@@ -372,6 +379,139 @@ class FaultInjectionManager:
                     raise ValueError(f'Invalid fault model {fault_model}')
                     
         return 0
+    
+    def dropout_run_faulty_campaign_on_weight(self,
+                                      fault_model: str,
+                                      fault_list: list,
+                                      first_batch_only: bool = False,
+                                      force_n: int = None,
+                                      save_output: bool = False,
+                                      save_ofm: bool = False,
+                                      ofm_folder: str = None) -> (str, int):
+        
+        self.skipped_inferences = 0
+        self.total_inferences = 0
+
+        
+         # Create the directory if it does not exist
+        MC_output_dir = "MC_Dropout_Faulty_Results"
+        if not os.path.exists(MC_output_dir):
+            os.makedirs(MC_output_dir)
+                    
+        with torch.no_grad():
+            
+            if force_n is not None:
+                fault_list = fault_list[:force_n]
+                
+            fault_list = sorted(fault_list, key=lambda x: x.injection)
+            
+            
+            pbar2 = tqdm(fault_list,
+                        colour='green',
+                        desc=f'Fault Injection',
+                        ncols=shutil.get_terminal_size().columns)
+            
+            # Create a CSV file to save the data
+           
+            for fault_id, fault in enumerate(pbar2):
+                
+        
+                if fault_model == 'stuck-at_params':
+                    self.__inject_fault_on_weight(fault, fault_mode='stuck-at')
+                else:
+                    raise ValueError(f'Invalid fault model {fault_model}')
+                
+                torch.cuda.reset_peak_memory_stats()
+                
+             
+                pbar = tqdm(self.loader,
+                        colour='green',
+                        desc=f'fault_id {fault_id}',
+                        ncols=min(120, shutil.get_terminal_size().columns))
+
+                            
+                        
+                # Initialize variables for recording results            
+                num_errors = 0
+                pred_class = 0
+                true_label = 0
+                confidence = 0
+                entropy = 0
+                mean_logits_pred_class = 0
+                var_pred_class = 0
+                var_pred_class_n = 0
+                all_variances = 0
+                dataset_size = 0
+                records = []
+                    
+                for batch_id, batch in enumerate(pbar):
+                    
+                    data, label = batch
+                    data = data.to(self.device)
+                    label = label.to(self.device)  
+                    
+                    # -------- MC Dropout multipass ------------
+                    mean_logits, var_logits, mean_probs, entropy, MC_output = mc_dropout_forward(
+                       self.network, data, forward_passes=20
+                    )
+                    # print(MC_output, 'MC_output')
+                    # print(mean_logits, 'mean_logits')
+                    # print(var_logits, 'var_logits')
+                    preds       = mean_probs.argmax(dim=1)                # predizione finale
+                    confidences = mean_probs.max(dim=1).values            # confidenza finale
+                    dataset_size += label.size(0)
+                    num_errors   += (preds != label).sum().item()
+                    pbar.set_description(f'MC fault {fault_id}')
+                    if batch_id % 10 == 0:
+                        pbar.set_postfix(errors=num_errors, total=dataset_size)
+
+                    
+                    # ------ Costruzione record sample per sample --------
+                    for i in range(data.size(0)):
+                    
+                        pred_class = preds[i].item()
+                        true_label = label[i].item()
+                        confidence = confidences[i].item()
+                        entropy_val = entropy[i].item()
+                        var_pred_class = var_logits[i, pred_class].item()
+                        mean_logits_pred_class = mean_logits[i, pred_class].item()  # Classe predetta
+                        # print(var_logits[i])
+                        # print(var_logits[i].sum().item())
+                        # print(len(var_logits[i]))
+                        # exit(-1)
+                        var_pred_class_n = var_logits[i, pred_class].item() / var_logits[i].sum().item()
+                        # total_var = var_logits[i].sum().item()
+                        all_variances = var_logits[i].tolist()  # Save all 10 variances as a list
+                        # print(var_pred_class_n)
+                        records.append({
+                            "fault_id": fault_id,  # Add fault_id to the record
+                            "pred_class": pred_class,
+                            "true_label": true_label,
+                            "confidence": round(confidence, 3),
+                            "entropy": round(entropy_val, 9),
+                            "mean logits": round(mean_logits_pred_class, 4),  # Convert to list for DataFrame
+                            "var_pred_class": round(var_pred_class,5),  # Variance of the predicted class
+                            "var_pred_class_n": round(var_pred_class_n,8),  # Normalized variance
+                            # "total_var": round(total_var, 8),  # Total variance
+                            "all_variances": [round(v, 5) for v in all_variances]
+                        })
+
+                # Costruzione finale del DataFrame
+                df = pd.DataFrame(records)
+                df.to_csv(f"{MC_output_dir}/fault_{fault_id}_clean_mc_dropout_predictions.csv", index=False)
+
+                # print(f'Wrong predictions: {num_errors} / {dataset_size}')
+                # print(f'Accuracy        : {100 - (100 * num_errors / dataset_size):.2f}%')
+                
+                # Clean the fault    
+                if fault_model == 'stuck-at_params':
+                    self.weight_fault_injector.restore_fault()
+                else:
+                    raise ValueError(f'Invalid fault model {fault_model}')
+                    
+        return 0
+    
+        
     
     def __run_inference_on_batch(self,
                                  batch_id: int,

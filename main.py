@@ -1,5 +1,6 @@
 import copy
 import os
+from pyexpat import model
 import torch
 import SETTINGS
 from faultManager.FaultListManager import FLManager
@@ -9,6 +10,7 @@ from utils import get_network, get_device, get_loader, get_fault_list, clean_inf
                   get_fault_list, clean_inference, output_definition,  fault_list_gen, csv_summary, \
                   image_segmentation_clean_inference, segmentation_clean_output,csv_summary_segmentation
    
+from utils_MC_dropout import clean_dropout_MC_inference, set_dropout_probability, dropout_layers_activation, check_dropout_and_batchnorm_status
 
 
 def main():
@@ -99,6 +101,15 @@ def main():
         else:
             raise ValueError("Unsupported task type. Please check SETTINGS configuration.")
 
+        
+        
+        # if  SETTINGS.IMAGE_CLASSIFICATION and SETTINGS.MC_DROPOUT:
+        #     print('clean inference accuracy test with MC Dropout:')
+        #     set_dropout_probability(model=network, dropout_probability=SETTINGS.DROPOUT_PROBABILITY)
+        #     dropout_layers_activation(model=network)
+        #     check_dropout_and_batchnorm_status(model=network)
+        #     clean_dropout_MC_inference(network, loader, device, SETTINGS.BATCH_SIZE)
+            
         # Generate fault list
         fault_list_generator = FLManager(network=network,
                                                 network_name=SETTINGS.NETWORK,
@@ -124,8 +135,19 @@ def main():
                                                         clean_output=clean_ofm_manager.clean_output,
                                                         injectable_modules=injectable_modules)
         
-        if SETTINGS.IMAGE_CLASSIFICATION:
+        if SETTINGS.IMAGE_CLASSIFICATION and SETTINGS.MC_DROPOUT == False:
             fault_injection_executor.run_faulty_campaign_on_weight(fault_model=SETTINGS.FAULT_MODEL,
+                                                                fault_list=fault_list,
+                                                                first_batch_only=False,
+                                                                force_n=SETTINGS.FAULTS_TO_INJECT,
+                                                                save_output=SETTINGS.SAVE_FAULTY_OUTPUT,
+                                                                save_ofm=SETTINGS.SAVE_FAULTY_OFM,
+                                                                ofm_folder=faulty_fm_folder)
+        elif SETTINGS.IMAGE_CLASSIFICATION and SETTINGS.MC_DROPOUT:
+            set_dropout_probability(model=network, dropout_probability=SETTINGS.DROPOUT_PROBABILITY)
+            dropout_layers_activation(model=network)
+            check_dropout_and_batchnorm_status(model=network)
+            fault_injection_executor.dropout_run_faulty_campaign_on_weight(fault_model=SETTINGS.FAULT_MODEL,
                                                                 fault_list=fault_list,
                                                                 first_batch_only=False,
                                                                 force_n=SETTINGS.FAULTS_TO_INJECT,

@@ -43,8 +43,26 @@ class WeightFaultInjector:
             self.tensor_index = None
         else:
             print("No fault to restore!")
-
     def __float32_bit_flip(self):
+        """
+        Inject a bit-flip on a data represented as float32
+        :return: The value of the bit-flip on the golden value
+        """
+        if not (0 <= self.bit <= 31):
+            raise ValueError(f"Invalid bit index {self.bit}: must be between 0 and 31")
+
+        float_list = []
+        a = struct.pack('!f', self.golden_value)
+        b = struct.pack('!I', 1 << self.bit)  # Bitmask for the bit to flip
+
+        for ba, bb in zip(a, b):
+            float_list.append(ba ^ bb)
+
+        faulted_value = struct.unpack('!f', bytes(float_list))[0]
+
+        return faulted_value
+
+    def __float32_bit_flip2(self):
         """
         Inject a bit-flip on a data represented as float32
         :return: The value of the bit-flip on the golden value

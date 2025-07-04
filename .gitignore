@@ -8,6 +8,7 @@ dlModels/CIFAR10/pretrained/*.pt
 dlModels/CIFAR10/pretrained/*.th
 dlModels/PASCAL_VOC/pretrained/*.pth
 /results_summary
+/MC_Dropout_Faulty_Results
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
