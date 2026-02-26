@@ -1,12 +1,12 @@
 # Fault Injection Tool for the Reliability Assessment of Deep Learning Algorithms
 
 ## Overview
-**SFIadvancedmodels** is open-source software for testing the resilience of deep learning algorithms against random hardware faults. 
+**SFIadvancedmodels** is open-source software designed to evaluate the resilience of deep learning algorithms against random hardware faults. The tool enables systematic fault injection (FI) campaigns to assess how permanent memory faults affecting model weights influence inference results.
 
 ## Project structure
 
 This project is organized as follows:
-- `requirements.txt`: Packages to install in a virtual environment to run the application.
+- `requirements.txt`: List of required Python packages for running the application in a virtual environment.
 - `main.py`: Main entry point. Generates fault lists, runs FI campaigns (saving OFMs and outputs, both golden and faulty), and performs the final FI analysis.
 - `SETTINGS.py`: Configuration file for experiment preferences.
 - `utils.py`: Utility functions and helper modules.
@@ -16,40 +16,40 @@ This project is organized as follows:
 
 ## Setup
 
-To get started, first clone the repository from GitHub:
+First, clone the repository from GitHub:
 
 `git clone https://github.com/your-username/SFIadvancedmodels.git`
 
 ## Creating a Python Environment
-It is recommended to create a virtual environment to manage your dependencies. You can do this using venv:
+It is recommended to create a virtual environment to manage dependencies:
 
 `python3 -m venv environment_name`
 
 `source environment_name/bin/activate`
 
 ## Installing Dependencies
-Once your virtual environment is activated, install the required packages listed in requirements.txt:
+After activating the virtual environment, install the required packages:
 
 `pip install -r requirements.txt`
 
 ## Usage
-To generate the fault list, start a fault injection, or analyze the data, edit the `SETTINGS.py` file to configure your experiments, then run:
+To generate the fault list, execute a fault injection campaign, or analyze the data, edit the `SETTINGS.py` file to configure your experiments, then run:
 
 ```bash
 python3 main.py
 ```
 
-Note: the injected fault is permanent and simulates a stuck-at fault in the memory that stores the model weights.
+Note: Injected faults are permanent and simulate stuck-at faults in the memory storing the model weights.
 
 ## Outputs
-The code is divided into four separately activatable parts that produce different outputs, controlled by boolean variables in the `SETTINGS.py` file:
+The framework is divided into four separately activatable parts that produce different outputs, controlled by boolean variables in the `SETTINGS.py` file:
 
 - `FAULT_LIST_GENERATION`: Generates a fault list for the selected network based on the configured parameters.
 - `FAULTS_INJECTION`: Loads the fault list and executes the fault injection campaign, saving outputs and golden/corrupted OFMs according to the set preferences.
 - `FI_ANALYSIS`: Compares corrupted outputs to golden outputs and reports the number of masked, non-critical, and critical (SDC-1) faults.
 - `FI_ANALYSIS_SUMMARY`: Summarizes large analysis CSV files into a more accessible format when many faults are injected or large datasets are used.
 
-The outputs produced by SFI are stored in the `output` folder. More specifically:
+All outputs are stored in the `output` folder. More specifically:
 
 - `output/clean_feature_maps`: Stores the clean feature maps.
 - `output/clean_output`: Stores the clean outputs.
@@ -60,7 +60,7 @@ The outputs produced by SFI are stored in the `output` folder. More specifically
 - `results_summary/`: Stores summarized analysis results.
 
 
-Files are named as follows:
+## File Naming Convention:
 
 - Clean FM: `batch_[batch_id]_layer_[layer_name].npz`.
 	This file contains the clean output feature map of layer `[layer_name]` for input batch `[batch_id]`.
@@ -84,7 +84,7 @@ To load FM arrays use `np.load(file_name)['arr_0']`. To load output arrays use `
 
 ## Fault list
 
-The generated fault lists are CSV files with a specific format to which the FI refers in order to inject faults into the neural model. The structure is as follows:
+Generated fault lists are CSV files that define where and how faults are injected into the neural network. The structure is as follows:
 
 
 Example fault list (FL) for a VGG-11 model with the GTSRB dataset
@@ -102,20 +102,20 @@ Example fault list (FL) for a VGG-11 model with the GTSRB dataset
 
 ## Analyses
 
-The analysis files produced by the `FI_ANALYSIS` option are stored in the `results/` folder and are organized by dataset, model, and batch size: `results/dataset-name/model-name/batch-size/`.
-Inside that folder there are two files:
+When `FI_ANALYSIS` is enabled, results are stored in: `results/dataset-name/model-name/batch-size/`
 
+This directory contains:
 - `fault_statistics.txt`: Text file containing the total counts of masked, non-critical, and critical (SDC-1) inferences.
 - `output_analysis.csv`: CSV file containing classification details for every fault and inference.
 
-Faults are classified into three categories:
-- `masked`: Inference that masks the fault.
-- `non-critical`: Inference where the fault alters outputs but does not change the predicted class.
-- `critical (SDC-1)`: Inference classified as SDC-1, meaning it changes the final prediction.
+Fault effects are classified as:
+- `masked`: The inference is unaffected.
+- `non-critical`: Outputs change, but the predicted class remains the same.
+- `critical (SDC-1)`: The fault changes the final prediction.
 
 
 
-The `output_analysis.csv` is organized as follows:
+Structure of `output_analysis.csv`:
 
 | fault | batch | image | output |
 |:-----:|:-----:|:-----:|:------:|
@@ -157,7 +157,7 @@ When many faults are injected or a large dataset is used, `output_analysis.csv` 
 This study was carried out within the FAIR - Future Artificial Intelligence Research and received funding from the European Union Next-GenerationEU (PIANO NAZIONALE DI RIPRESA E RESILIENZA (PNRR) – MISSIONE 4 COMPONENTE 2, INVESTIMENTO 1.3 – D.D. 1555 11/10/2022, PE00000013). This manuscript reflects only the authors’ views and opinions; neither the European Union nor the European Commission can be held responsible for them.
 
 ## Main Contributors
-- Annachiara Ruospo (annachiara.ruospo@polito.it)
 - Vittorio Turco (vittorio.turco@polito.it)
+- Annachiara Ruospo (annachiara.ruospo@polito.it)
 - Gabriele Gavarini
 
