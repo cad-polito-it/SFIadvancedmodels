@@ -1,7 +1,7 @@
 # Fault Injection Tool for the Reliability Assessment of Deep Learning Algorithms
 
 ## Overview
-**SFIadvancedmodels** is open-source software for testing the resilience of deep learning algorithms against random hardware faults. The framework performs advanced statistical fault-injection analyses by extending known fault models from the literature.
+**SFIadvancedmodels** is open-source software for testing the resilience of deep learning algorithms against random hardware faults. 
 
 ## Project structure
 
@@ -14,7 +14,7 @@ This project is organized as follows:
 - `ofmapManager/`: Stores the golden OFMs.
 - `dlModels/`: Directory where models and weights are stored.
 
-# Setup
+## Setup
 
 To get started, first clone the repository from GitHub:
 
@@ -32,7 +32,7 @@ Once your virtual environment is activated, install the required packages listed
 
 `pip install -r requirements.txt`
 
-# Usage
+## Usage
 To generate the fault list, start a fault injection, or analyze the data, edit the `SETTINGS.py` file to configure your experiments, then run:
 
 ```bash
@@ -82,7 +82,7 @@ Where `F` is the length of the fault list, `N` is the number of batches, `B` is 
 
 To load FM arrays use `np.load(file_name)['arr_0']`. To load output arrays use `np.load(file_name, allow_pickle=True)`.
 
-### Fault list
+## Fault list
 
 The generated fault lists are CSV files with a specific format to which the FI refers in order to inject faults into the neural model. The structure is as follows:
 
@@ -100,7 +100,7 @@ Example fault list (FL) for a VGG-11 model with the GTSRB dataset
 - `Bit`: The corrupted bit that is flipped.
 
 
-### Analyses
+## Analyses
 
 The analysis files produced by the `FI_ANALYSIS` option are stored in the `results/` folder and are organized by dataset, model, and batch size: `results/dataset-name/model-name/batch-size/`.
 Inside that folder there are two files:
@@ -131,7 +131,7 @@ The `output_analysis.csv` is organized as follows:
 - `image`: Index of the image in the batch on which the inference was performed.
 - `output`: Classification of the injected fault by comparing golden outputs with corrupted outputs. Values: `0` = masked, `1` = non-critical, `2` = critical (SDC-1).
 
-### Summarized analysis
+## Summarized analysis
 
 When many faults are injected or a large dataset is used, `output_analysis.csv` can become large and hard to read. Using the `FI_ANALYSIS_SUMMARY` option generates a summary CSV named `model-name_summary.csv` inside `results_summary/dataset-name/model-name/batch-size/`. This file combines the original fault list with summarized results for each fault. The CSV is organized as follows:
 
@@ -152,12 +152,12 @@ When many faults are injected or a large dataset is used, `output_analysis.csv` 
 - `non_critical`: Number of inferences classified as non-critical.
 - `critical`: Number of inferences classified as critical (SDC-1).
 
-# Acknowledgments
+## Acknowledgments
 
 This study was carried out within the FAIR - Future Artificial Intelligence Research and received funding from the European Union Next-GenerationEU (PIANO NAZIONALE DI RIPRESA E RESILIENZA (PNRR) – MISSIONE 4 COMPONENTE 2, INVESTIMENTO 1.3 – D.D. 1555 11/10/2022, PE00000013). This manuscript reflects only the authors’ views and opinions; neither the European Union nor the European Commission can be held responsible for them.
 
-# Main Contributors
-- Vittorio Turco (vittorio.turco@polito.it)
+## Main Contributors
 - Annachiara Ruospo (annachiara.ruospo@polito.it)
+- Vittorio Turco (vittorio.turco@polito.it)
 - Gabriele Gavarini
 
