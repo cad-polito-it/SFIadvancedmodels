@@ -3,6 +3,27 @@
 ## Overview
 **SFIadvancedmodels** is open-source software designed to evaluate the resilience of deep learning algorithms against random hardware faults. The tool enables systematic fault injection (FI) campaigns to assess how permanent memory faults affecting model weights influence inference results.
 
+## Citation
+
+If you use this repository in your research or projects, please cite the following article:
+
+```bibtex
+@INPROCEEDINGS{10173957,
+  author={Gavarini, G. and Ruospo, A. and Sanchez, E.},
+  booktitle={2023 IEEE European Test Symposium (ETS)}, 
+  title={SCI-FI: a Smart, aCcurate and unIntrusive Fault-Injector for Deep Neural Networks}, 
+  year={2023},
+  volume={},
+  number={},
+  pages={1-6},
+  keywords={Adaptation models;Neurons;Europe;Artificial neural networks;Network architecture;Hardware;Reliability;Deep Neural Network;Reliability;Speed-Up;Fault Injection;Fault Injector},
+  doi={10.1109/ETS56758.2023.10173957}}
+}
+```
+You can access the article online via the DOI link:
+[https://doi.org/10.1109/ETS56758.2023.10173957](https://doi.org/10.1109/ETS56758.2023.10173957)
+
+
 ## Project structure
 
 This project is organized as follows:
